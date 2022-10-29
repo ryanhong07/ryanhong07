@@ -5,7 +5,6 @@
 - 📫 **How to reach me: ryanhong9@gmail.com**
 - 🌱 **My current focus is Machine Learning and Artificial Intelligence**
 - 👀 **I’m a Car Enthusiast and a fan of F1, the pinnacle of motorsport racing.**
-- 
 
  
   
