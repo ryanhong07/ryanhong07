@@ -1,4 +1,4 @@
-<p align="left"><img width="810" src="https://github.com/alansmathew/alansmathew/raw/master/lang.gif" alt="hellogif" /></p>
+<p align="left"><img width="815" src="https://github.com/alansmathew/alansmathew/raw/master/lang.gif" alt="hellogif" /></p>
 
 
 - 👋 **Hi, I’m @ryanhong07 and I'm a self-taught programmer**
