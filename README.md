@@ -1,10 +1,11 @@
 <p align="left"><img width="815" src="https://github.com/alansmathew/alansmathew/raw/master/lang.gif" alt="hellogif" /></p>
 
 
-- 👋 **Hi, I’m @ryanhong07 and I'm a self-taught programmer**
+- 👋 ***Hi, I’m @ryanhong07 from Malaysia***
+- 📫 **How to reach me: ryanhong9@gmail.com**
 - 🌱 **My current focus is Machine Learning and Artificial Intelligence**
 - 👀 **I’m a Car Enthusiast and a fan of F1, the pinnacle of motorsport racing.**
-- 📫 **How to reach me: ryanhong9@gmail.com**
+- 
 
  
   
