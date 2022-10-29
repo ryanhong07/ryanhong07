@@ -9,7 +9,7 @@
  
   
 <p float="left">
-  <img src="https://github.com/ryanhong07/ryanhong07/blob/main/FJYrhfZXEAAkRxp_1.jpg" width="280" />
-  <img src="https://github.com/ryanhong07/ryanhong07/blob/main/FJYrhfaWQAAvYzP_1.jpg" width="280" /> 
-  <img src="https://github.com/ryanhong07/ryanhong07/blob/main/FJYrhfZXsAY3_7b.jpg" width="280" />
+  <img src="https://github.com/ryanhong07/ryanhong07/blob/main/FJYrhfZXEAAkRxp_1.jpg" width="250" />
+  <img src="https://github.com/ryanhong07/ryanhong07/blob/main/FJYrhfaWQAAvYzP_1.jpg" width="250" /> 
+  <img src="https://github.com/ryanhong07/ryanhong07/blob/main/FJYrhfZXsAY3_7b.jpg" width="250" />
 </p>
