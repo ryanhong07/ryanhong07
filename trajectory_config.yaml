@@ -1,0 +1,6 @@
+planner:
+  ros__parameters:
+    max_v: 5.0
+    max_a: 2.0
+
+    # waypoints: {}
