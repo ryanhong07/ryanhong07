@@ -120,66 +120,102 @@ bool BasicPlanner::planTrajectory(
   waypoints.push_back(Eigen::Vector3d(25.0, 39.0, 11.0)); // p5 (Tunnel Start)
   waypoints.push_back(Eigen::Vector3d(16.0, 39.0, 11.0)); // p6 (Tunnel End)
 
-  // Helper to get the position of the last vertex added
+  // Helper: get last position
   auto getLastPos = [&](const mav_trajectory_generation::Vertex::Vector& verts) -> Eigen::Vector3d {
-      Eigen::VectorXd pos; 
+      Eigen::VectorXd pos;
       verts.back().getConstraint(mav_trajectory_generation::derivative_order::POSITION, &pos);
-      return pos; 
+      return pos;
   };
 
-  // Helper to safely add a Position-Only vertex
-  auto addPosVertex = [&](const Eigen::Vector3d& pos) {
-      if (vertices.empty() || (pos - getLastPos(vertices)).norm() > 0.1) {
+  // Helper: add a position-only vertex if sufficiently far from last
+  auto addPosVertexIfFar = [&](const Eigen::Vector3d& pos, double min_dist = 0.1) {
+      if (vertices.empty()) {
           mav_trajectory_generation::Vertex v(dimension);
           v.addConstraint(mav_trajectory_generation::derivative_order::POSITION, pos);
           vertices.push_back(v);
+      } else {
+          if ((pos - getLastPos(vertices)).norm() > min_dist) {
+              mav_trajectory_generation::Vertex v(dimension);
+              v.addConstraint(mav_trajectory_generation::derivative_order::POSITION, pos);
+              vertices.push_back(v);
+          }
       }
   };
 
-  // --- LOOP 1: Fast Pass ---
+  // Helper: add a velocity-constrained vertex (position + velocity)
+  auto addPosVelVertex = [&](const Eigen::Vector3d& pos, const Eigen::Vector3d& vel) {
+      mav_trajectory_generation::Vertex v(dimension);
+      v.addConstraint(mav_trajectory_generation::derivative_order::POSITION, pos);
+      v.addConstraint(mav_trajectory_generation::derivative_order::VELOCITY, vel);
+      vertices.push_back(v);
+  };
+
+  // --- QUICK FIRST PASS (fast loop through gates) ---
   for (size_t i = 0; i < waypoints.size(); ++i) {
-      addPosVertex(waypoints[i]);
+      addPosVertexIfFar(waypoints[i], 0.1);
+  }
+  // return to origin after first loop
+  addPosVertexIfFar(Eigen::Vector3d(0.0, 0.0, 0.0));
+
+  // --- SECOND PASS (precision, slow-down at tricky legs) ---
+  // Leg: Start -> p1 (fast)
+  addPosVertexIfFar(waypoints[0]);
+
+  // Before p2: add a braking waypoint halfway, slow velocity component toward p2
+  {
+      Eigen::Vector3d mid = 0.5 * (waypoints[0] + waypoints[1]);
+      // encourage reduced speed before the ring
+      Eigen::Vector3d slow_vel = (waypoints[1] - waypoints[0]).normalized() * std::min(max_v_, 0.6);
+      addPosVelVertex(mid, slow_vel);  // approach slowly
+      addPosVertexIfFar(waypoints[1]);
   }
 
-  // Connect Loop 1 -> Loop 2 (Return to Origin)
-  addPosVertex(Eigen::Vector3d(0.0, 0.0, 0.0));
+  // p2 -> p3: smoother, add midpoints
+  {
+      Eigen::Vector3d mid = 0.5 * (waypoints[1] + waypoints[2]);
+      Eigen::Vector3d slow_vel = (waypoints[2] - waypoints[1]).normalized() * std::min(max_v_, 0.8);
+      addPosVelVertex(mid, slow_vel);
+      addPosVertexIfFar(waypoints[2]);
+  }
 
-  // --- LOOP 2: Precision Run ---
-  
-  // Leg 1: Start -> p1
-  addPosVertex(waypoints[0]); 
+  // p3 -> p4: keep a position at p4 but also an early alignment to avoid corner-cutting
+  addPosVertexIfFar(waypoints[3]);
 
-  // Leg 2: p1 -> p2 (Brake)
-  Eigen::Vector3d p1_p2_mid = (waypoints[0] + waypoints[1]) * 0.5; 
-  addPosVertex(p1_p2_mid);
-  addPosVertex(waypoints[1]); // p2
+  // p4 -> Tunnel: insert an earlier alignment point (same y,z as tunnel but at x=30)
+  // This prevents the drone from approaching the tunnel from above or too steeply.
+  {
+      Eigen::Vector3d align = Eigen::Vector3d(30.0, 39.0, 11.0); // align far out
+      addPosVertexIfFar(align);
 
-  // Leg 3: p2 -> p3 (Smoother)
-  Eigen::Vector3d p2_p3_mid = (waypoints[1] + waypoints[2]) * 0.5;
-  addPosVertex(p2_p3_mid);
-  addPosVertex(waypoints[2]); // p3
+      // a point slightly before the tunnel entry but centered in z to avoid "top-of-entrance" approach
+      Eigen::Vector3d pre_tunnel = Eigen::Vector3d(27.0, 39.0, 10.5);
+      // enforce a moderate forward velocity towards the tunnel entrance
+      Eigen::Vector3d forward_vel = Eigen::Vector3d(-std::abs(std::min(max_v_, 0.7)), 0.0, 0.0);
+      addPosVelVertex(pre_tunnel, forward_vel);
 
-  // Leg 4: p3 -> p4
-  addPosVertex(waypoints[3]); // p4
+      // tunnel entrance
+      addPosVertexIfFar(waypoints[4]);
+  }
 
-  // Leg 5: p4 -> Tunnel (The "Square Turn" Fix)
-  // p4 is (35, 35, 6). Tunnel is (25, 39, 11).
-  // We force alignment WAY back at x=30 to prevent corner cutting.
-  
-  // Step 1: Climb and align Y early (at x=30)
-  // This makes the drone fly "North" to y=39 while it is still far from the tunnel (x=30).
-  addPosVertex(Eigen::Vector3d(30.0, 39.0, 11.0)); 
-  
-  // Step 2: Enter Tunnel (p5)
-  // Now we just fly straight West from x=30 to x=25. No turning involved.
-  addPosVertex(waypoints[4]);
+  // INSIDE TUNNEL: add two centerline points with velocity constraints to force a straight-line pass
+  // we pick two x positions between p5 (x=25) and p6 (x=16), e.g. x=23 and x=20
+  {
+      Eigen::Vector3d center_yz = Eigen::Vector3d(0.0, waypoints[4].y(), waypoints[4].z());
+      // point 1 inside tunnel
+      Eigen::Vector3d t1 = Eigen::Vector3d(23.0, center_yz.y(), center_yz.z());
+      // point 2 inside tunnel
+      Eigen::Vector3d t2 = Eigen::Vector3d(20.0, center_yz.y(), center_yz.z());
 
-  // Step 3: Mid-Tunnel Pin (The "Anti-Wobble" Fix)
-  // Force the drone to stay center at x=20.5.
-  addPosVertex(Eigen::Vector3d(20.5, 39.0, 11.0));
+      // enforce forward velocity along -x (assuming motion from higher x to lower x)
+      Eigen::Vector3d tunnel_vel = Eigen::Vector3d(-std::abs(std::min(max_v_, 0.6)), 0.0, 0.0);
+
+      addPosVelVertex(t1, tunnel_vel);
+      addPosVelVertex(t2, tunnel_vel);
+  }
 
   // *** STOP: Tunnel End (p6) ***
-  if ((waypoints.back() - getLastPos(vertices)).norm() > 0.1) {
+  {
+      // ensure the tunnel stop is fully constrained (pos, zero vel, zero acc)
       mav_trajectory_generation::Vertex tunnel_stop(dimension);
       tunnel_stop.addConstraint(mav_trajectory_generation::derivative_order::POSITION, waypoints.back());
       tunnel_stop.addConstraint(mav_trajectory_generation::derivative_order::VELOCITY, Eigen::Vector3d::Zero());
